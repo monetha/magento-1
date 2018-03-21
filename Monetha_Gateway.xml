@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<config>
+    <modules>
+        <Monetha_Gateway>
+            <active>true</active>
+            <codePool>local</codePool>
+        </Monetha_Gateway>
+    </modules>
+</config>
