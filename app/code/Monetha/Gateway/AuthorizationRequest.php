@@ -3,17 +3,17 @@
 class Monetha_Gateway_AuthorizationRequest
 {
     /**
-     * @var string 
+     * @var string
      */
     private $merchantKey = '';
 
     /**
-     * @var string 
+     * @var string
      */
     private $merchantSecret = '';
 
     /**
-     * @var bool 
+     * @var bool
      */
     private $testMode = false;
 
@@ -32,9 +32,9 @@ class Monetha_Gateway_AuthorizationRequest
      * @throws \Exception
      */
     private function callApi($uri, $method = 'GET', array $body = null) {
-        $mthApi = "https://api.monetha.io/";
+        $mthApi = "https://api.monetha.io/mth-gateway/";
         if ($this->testMode) {
-            $mthApi = "https://api-sandbox.monetha.io/";
+            $mthApi = "https://api-sandbox.monetha.io/mth-gateway/";
         }
 
         $chSign = curl_init();
@@ -69,7 +69,7 @@ class Monetha_Gateway_AuthorizationRequest
             //TODO: log
             throw new \Exception($res);
         }
-        
+
         $resJson = json_decode($res);
 
         curl_close($chSign);
