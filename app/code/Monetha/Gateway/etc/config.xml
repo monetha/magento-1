@@ -15,6 +15,9 @@
       <monetha>
         <class>Monetha_Gateway_Helper</class>
       </monetha>
+      <monetha>
+        <class>Monetha_Gateway_Const</class>
+      </monetha>
     </helpers>
     <blocks>
       <monetha>
@@ -22,13 +25,36 @@
       </monetha>
     </blocks>
   </global>
+  <adminhtml>
+    <events>
+      <admin_system_config_changed_section_payment>
+        <observers>
+          <monetha>
+            <type>singleton</type>
+            <class>Monetha_Gateway_Model_Observer</class>
+            <method>changeSystemConfig</method>
+          </monetha>
+        </observers>
+      </admin_system_config_changed_section_payment>
+      <sales_order_save_after>
+        <observers>
+          <monetha>
+            <type>singleton</type>
+            <class>Monetha_Gateway_Model_OrderStatusChangeObserver</class>
+            <method>handleOrderStatusChange</method>
+          </monetha>
+        </observers>
+      </sales_order_save_after>
+    </events>
+  </adminhtml>
   <default>
     <payment>
       <monetha>
         <model>monetha/standard</model>
         <active>1</active>
         <order_status>pending</order_status>
-        <title>Monetha Gateway</title><payment_action>sale</payment_action>
+        <title>Monetha Gateway</title>
+        <payment_action>sale</payment_action>
         <allowspecific>0</allowspecific>
         <sort_order>1</sort_order>
         <testMode>1</testMode>

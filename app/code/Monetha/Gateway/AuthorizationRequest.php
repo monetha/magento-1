@@ -2,132 +2,15 @@
 
 class Monetha_Gateway_AuthorizationRequest
 {
-    /**
-     * @var string
-     */
     private $merchantKey = '';
-
-    /**
-     * @var string
-     */
     private $merchantSecret = '';
-
-    /**
-     * @var bool
-     */
     private $testMode = false;
 
-    public function __construct() {
-        $this->testMode = Mage::getStoreConfig('payment/monetha/testMode');
+    public function __construct()
+    {
+        $this->testMode = (bool)Mage::getStoreConfig('payment/monetha/testMode');
         $this->merchantKey = Mage::getStoreConfig('payment/monetha/merchantKey');
         $this->merchantSecret = Mage::getStoreConfig('payment/monetha/merchantSecret');
-    }
-
-    /**
-     * @param string $uri
-     * @param string $method
-     * @param array|null $body
-     *
-     * @return mixed
-     * @throws \Exception
-     */
-    private function callApi($uri, $method = 'GET', array $body = null) {
-        $mthApi = "https://api.monetha.io/mth-gateway/";
-        if ($this->testMode) {
-            $mthApi = "https://api-sandbox.monetha.io/mth-gateway/";
-        }
-
-        $chSign = curl_init();
-
-        $options = [
-            CURLOPT_URL => $mthApi . $uri,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER =>  array(
-                "Cache-Control: no-cache",
-                "Content-Type: application/json",
-                "MTH-Deal-Signature: " . $this->merchantKey . ":" . $this->merchantSecret
-            ),
-        ];
-
-        if ($method !== 'GET' && $body) {
-            $options[CURLOPT_POSTFIELDS] = json_encode($body, JSON_NUMERIC_CHECK);
-            $options[CURLOPT_CUSTOMREQUEST] = $method;
-        }
-
-        curl_setopt_array($chSign, $options);
-
-        $res = curl_exec($chSign);
-        $error = curl_error($chSign);
-
-        if ($error) {
-            //TODO: log
-            throw new \Exception($error);
-        }
-
-        $resStatus = curl_getinfo($chSign, CURLINFO_HTTP_CODE);
-        if ($resStatus < 200 || $resStatus >= 300) {
-            //TODO: log
-            throw new \Exception($res);
-        }
-
-        $resJson = json_decode($res);
-
-        curl_close($chSign);
-
-        return $resJson;
-    }
-
-    /**
-     * @param Monetha_Gateway_OrderAdapterInterface $order
-     * @param string $orderId
-     *
-     * @return array
-     */
-    public function createDeal(Monetha_Gateway_OrderAdapterInterface $order, $orderId) {
-        $items = [];
-        $cartItems = $order->getItems();
-
-        $itemsPrice = 0;
-        foreach($cartItems as $item) {
-            /**
-             * @var $item Monetha_Gateway_Interceptor
-             */
-            $price = round($item->getPrice(), 2);
-            $quantity = $item->getQtyOrdered();
-            $li = [
-                'name' => $item->getName(),
-                'quantity' => $quantity,
-                'amount_fiat' => $price,
-            ];
-            $itemsPrice += $price * $quantity;
-            $items[] = $li;
-        }
-
-        $itemsPrice = round($itemsPrice, 2);
-
-        $grandTotal = round($order->getGrandTotalAmount(), 2);
-
-        // Add shipping and taxes
-        $shipping = [
-            'name' => 'Shipping and taxes',
-            'quantity' => 1,
-            'amount_fiat' => round($grandTotal - $itemsPrice, 2),
-        ];
-        $items[] = $shipping;
-
-        $deal = array(
-            'deal' => array(
-                'amount_fiat' => $grandTotal,
-                'currency_fiat' => $order->getCurrencyCode(),
-                'line_items' => $items
-            ),
-            'return_url' => $order->getBaseUrl(),
-            'callback_url' => 'https://www.monetha.io/callback',
-            'cancel_url' => 'https://www.monetha.io/cancel',
-            'external_order_id' => $orderId . " ",
-        );
-
-        return $deal;
     }
 
     /**
@@ -136,14 +19,27 @@ class Monetha_Gateway_AuthorizationRequest
      * @return string
      * @throws \Exception
      */
-    public function getPaymentUrl(array $deal) {
-        $resJson = $this->callApi("v1/merchants/offer", 'POST', $deal);
-        $paymentUrl = '';
-        if ($resJson && $resJson->token) {
-            $resJson = $this->callApi('v1/deals/execute?token=' . $resJson->token);
-            $paymentUrl = $resJson->order->payment_url;
-        }
+    public function getPaymentUrl(Monetha_Gateway_OrderAdapterInterface $order, $orderId)
+    {
+        $gatewayService = new Monetha_Gateway_Helper_GatewayService($this->merchantSecret, $this->merchantKey, $this->testMode);
+        try {
+            $offerBody = $gatewayService->prepareOfferBody($order, $orderId);
+            Mage::Log(json_encode($offerBody));
+            $offerResponse = $gatewayService->createOffer($offerBody);
+            $executeOfferResponse = $gatewayService->executeOffer($offerResponse->token);
 
-        return $paymentUrl;
+            $currentOrder = Mage::getModel('sales/order')->loadByIncrementId($orderId);
+            $currentOrder->addStatusHistoryComment('Peyment url: ' . $executeOfferResponse->order->payment_url);
+            $currentOrder->save();
+            $payment = $currentOrder->getPayment();
+            $payment->setAdditionalInformation('payment_url', $executeOfferResponse->order->payment_url);
+            $payment->setAdditionalInformation('external_order_id', $executeOfferResponse->order->id);
+            $payment->save();
+
+            return $executeOfferResponse->order->payment_url;
+        } catch (\Exception $ex) {
+            Mage::Log($ex->getMessage());
+            Mage::throwException('Failed to create order. ' . $ex->getMessage());
+        }
     }
 }

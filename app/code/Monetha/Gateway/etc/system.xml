@@ -21,12 +21,13 @@
               <show_in_store>0</show_in_store>
             </active>
             <title translate="label">
-              <label>Title</label>
+              <label>Title (required)</label>
               <frontend_type>text</frontend_type>
               <sort_order>20</sort_order>
               <show_in_default>1</show_in_default>
               <show_in_website>1</show_in_website>
               <show_in_store>1</show_in_store>
+              <comment>* field is required</comment>
             </title>
             <order_status translate="label">
               <label>New Order Status</label>
@@ -61,7 +62,7 @@
             <sort_order translate="label">
               <label>Sort Order</label>
               <frontend_type>text</frontend_type>
-			  <sort_order>100</sort_order>
+              <sort_order>100</sort_order>
               <show_in_default>1</show_in_default>
               <show_in_website>1</show_in_website>
               <show_in_store>0</show_in_store>
@@ -76,20 +77,22 @@
               <show_in_store>0</show_in_store>
             </testMode>
             <merchantKey translate="label">
-              <label>Merchant Key</label>
+              <label>Monetha Api Key (required)</label>
               <frontend_type>text</frontend_type>
               <sort_order>100</sort_order>
               <show_in_default>1</show_in_default>
               <show_in_website>1</show_in_website>
               <show_in_store>0</show_in_store>
+              <comment>* field is required</comment>
             </merchantKey>
             <merchantSecret translate="label">
-              <label>Merchant Secret</label>
+              <label>Merchant Secret (required)</label>
               <frontend_type>text</frontend_type>
               <sort_order>100</sort_order>
               <show_in_default>1</show_in_default>
               <show_in_website>1</show_in_website>
               <show_in_store>0</show_in_store>
+              <comment>* field is required</comment>
             </merchantSecret>
           </fields>
         </monetha>
