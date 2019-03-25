@@ -25,7 +25,11 @@ class Monetha_Gateway_Helper_GatewayService extends Mage_Core_Helper_Abstract
         $apiUrl = $apiUrl . 'v1/merchants/' . $merchantId .'/secret';
 
         $response = Monetha_Gateway_Helper_HttpService::callApi($apiUrl, 'GET', null, ["Authorization: Bearer " . $this->mthApiKey]);
-        return ($response && $response->integration_secret && $response->integration_secret == $this->merchantSecret);
+        if(isset($response->integration_secret))
+        {
+            return $response->integration_secret == $this->merchantSecret;
+        }
+        return false;
     }
 
     public function getMerchantId()
@@ -89,7 +93,10 @@ class Monetha_Gateway_Helper_GatewayService extends Mage_Core_Helper_Abstract
                 'amount_fiat' => $price,
             ];
             $itemsPrice += $price * $quantity;
-            $items[] = $li;
+            if($price > 0)
+            {
+                $items[] = $li;
+            }
         }
 
         $itemsPrice = round($itemsPrice, 2);
@@ -102,16 +109,47 @@ class Monetha_Gateway_Helper_GatewayService extends Mage_Core_Helper_Abstract
             'quantity' => 1,
             'amount_fiat' => round($grandTotal - $itemsPrice, 2),
         ];
-        $items[] = $shipping;
 
+        if($shipping['amount_fiat'] > 0)
+        {
+            $items[] = $shipping;
+        }
+
+        $client_id = 0;
+        $order_data = Mage::getModel('sales/order')->loadByIncrementId($orderId);
+        $billing_address = $order_data->getBillingAddress();
+
+
+        if($billing_address->getTelephone()) {
+            $client_body = array(
+                "contact_name" => $billing_address->getFirstname() . ' ' . $billing_address->getLastname(),
+                "contact_email" => $billing_address->getEmail(),
+                "contact_phone_number" => $billing_address->getTelephone(),
+                "country_code_iso" => $billing_address->getCountryId(),
+                "zipcode" => $billing_address->getPostcode(),
+                "address" => $billing_address->getStreet()[0],
+                "city" => $billing_address->getCity()
+
+            );
+
+            $apiUrl = $this->getApiUrl();
+            $apiUrl = $apiUrl . 'v1/clients';
+
+            $resJson = Monetha_Gateway_Helper_HttpService::callApi($apiUrl, 'POST', $client_body, ["Authorization: Bearer " . $this->mthApiKey]);
+
+            if(isset($resJson->client_id)) {
+                $client_id = $resJson->client_id;
+            }
+        }
         $deal = array(
             'deal' => array(
                 'amount_fiat' => $grandTotal,
                 'currency_fiat' => $order->getCurrencyCode(),
-                'line_items' => $items
+                'line_items' => $items,
+                'client_id' => $client_id
             ),
             'return_url' => $order->getBaseUrl(),
-            'callback_url' => $order->getBaseUrl(),
+            'callback_url' => $order->getBaseUrl() . "monetha/callback/handle",
             'external_order_id' => $orderId . " ",
         );
 
@@ -124,5 +162,71 @@ class Monetha_Gateway_Helper_GatewayService extends Mage_Core_Helper_Abstract
         $apiUrl = $apiUrl . 'v1/deals/execute';
 
         return Monetha_Gateway_Helper_HttpService::callApi($apiUrl, 'POST', ["token" => $token], []);
+    }
+
+    public function processAction($data)
+    {
+
+        $order = Mage::getModel('sales/order')->loadByIncrementId($data->payload->external_order_id);
+
+        switch ($data->resource) {
+            case Monetha_Gateway_Const_Resource::ORDER:
+                switch ($data->event) {
+                    case Monetha_Gateway_Const_EventType::CANCELLED:
+                        $this->cancelOrderInvoice($order);
+                        $order->cancel();
+                        $order->save();
+                        $this->addOrderComment($order, $data->payload->note);
+                        break;
+                    case Monetha_Gateway_Const_EventType::FINALIZED:
+                        $this->setInvoicePaid($order);
+                        $this->addOrderComment($order, 'Order has been successfully paid.');
+                        break;
+                    case Monetha_Gateway_Const_EventType::MONEY_AUTHORIZED:
+                        $this->setInvoicePaid($order);
+                        $this->addOrderComment($order, 'Order has been successfully paid by card.');
+                        break;
+                    default:
+                        return 'Bad event type!';
+                        break;
+                }
+                break;
+
+            default:
+            return 'Bad resource type!';
+            break;
+        }
+    }
+
+    public function validateSignature($signature, $data)
+    {
+        return $signature == base64_encode(hash_hmac('sha256', $data, $this->merchantSecret, true));
+    }
+
+    public function setInvoicePaid($order)
+    {
+        foreach ($order->getInvoiceCollection() as $invoice) {
+            $invoice->pay();
+            $invoice->save();
+        }
+    }
+
+    public function cancelOrderInvoice($order)
+    {
+        foreach ($order->getInvoiceCollection() as $invoice) {
+            if ($invoice->canCancel()) {
+                $invoice->cancel();
+                $invoice->save();
+                $order->save();
+            }
+        }
+    }
+
+    public function addOrderComment($order, $comment)
+    {
+        if (!empty($comment)) {
+            $order->addStatusHistoryComment($comment);
+            $order->save();
+        }
     }
 }
