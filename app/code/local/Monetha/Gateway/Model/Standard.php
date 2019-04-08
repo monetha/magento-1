@@ -1,4 +1,7 @@
 <?php
+
+//require_once __DIR__ . '/../../vendor/autoload.php';
+
 class Monetha_Gateway_Model_Standard extends Mage_Payment_Model_Method_Abstract {
 	protected $_code = 'monetha';
 	
